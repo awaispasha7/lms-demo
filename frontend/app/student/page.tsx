@@ -29,10 +29,6 @@ export default function StudentPortal() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignments' | 'grades'>('assignments');
 
-  useEffect(() => {
-    fetchAssignments();
-  }, []);
-
   const fetchAssignments = async () => {
     try {
       const response = await api.get('/student/assignments');
@@ -46,19 +42,41 @@ export default function StudentPortal() {
 
   const fetchSubmissions = async () => {
     if (!studentName.trim()) {
-      alert('Please enter your name to view grades');
       return;
     }
 
     try {
       const response = await api.get(`/student/submissions?studentName=${encodeURIComponent(studentName)}`);
       setSubmissions(response.data);
-      setActiveTab('grades');
     } catch (error) {
       console.error('Error fetching submissions:', error);
-      alert('Error loading your grades. Please try again.');
     }
   };
+
+  useEffect(() => {
+    fetchAssignments();
+    
+    // Poll for assignment updates every 3 seconds
+    const interval = setInterval(() => {
+      fetchAssignments();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    // Poll for submission updates when student name is set and grades tab is active
+    if (studentName.trim() && activeTab === 'grades') {
+      fetchSubmissions();
+      
+      const interval = setInterval(() => {
+        fetchSubmissions();
+      }, 3000);
+
+      return () => clearInterval(interval);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentName, activeTab]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -143,7 +161,14 @@ export default function StudentPortal() {
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
-                  onClick={fetchSubmissions}
+                  onClick={() => {
+                    if (!studentName.trim()) {
+                      alert('Please enter your name to view grades');
+                      return;
+                    }
+                    setActiveTab('grades');
+                    fetchSubmissions();
+                  }}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
                 >
                   View Grades

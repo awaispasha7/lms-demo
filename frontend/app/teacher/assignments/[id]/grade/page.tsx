@@ -47,6 +47,13 @@ export default function GradeAssignment() {
 
   useEffect(() => {
     fetchData();
+    
+    // Poll for updates every 3 seconds
+    const interval = setInterval(() => {
+      fetchData();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, [assignmentId]);
 
   const fetchData = async () => {
@@ -57,7 +64,7 @@ export default function GradeAssignment() {
       ]);
       setAssignment(assignmentRes.data);
       setSubmissions(submissionsRes.data);
-      if (submissionsRes.data.length > 0) {
+      if (submissionsRes.data.length > 0 && !selectedSubmission) {
         setSelectedSubmission(submissionsRes.data[0].id);
       }
     } catch (error) {

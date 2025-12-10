@@ -19,6 +19,13 @@ export default function TeacherPortal() {
 
   useEffect(() => {
     fetchAssignments();
+    
+    // Poll for updates every 3 seconds
+    const interval = setInterval(() => {
+      fetchAssignments();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchAssignments = async () => {
