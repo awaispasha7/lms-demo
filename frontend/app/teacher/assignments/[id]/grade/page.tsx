@@ -44,6 +44,8 @@ export default function GradeAssignment() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generatingFeedback, setGeneratingFeedback] = useState(false);
+  const [autoGraded, setAutoGraded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchData();
@@ -64,6 +66,15 @@ export default function GradeAssignment() {
       ]);
       setAssignment(assignmentRes.data);
       setSubmissions(submissionsRes.data);
+      
+      // Track which submissions have been auto-graded
+      const gradedIds = new Set<number>(
+        submissionsRes.data
+          .filter((s: Submission) => s.aiScore !== null)
+          .map((s: Submission) => s.id)
+      );
+      setAutoGraded(gradedIds);
+      
       if (submissionsRes.data.length > 0 && !selectedSubmission) {
         setSelectedSubmission(submissionsRes.data[0].id);
       }
@@ -77,6 +88,7 @@ export default function GradeAssignment() {
   const handleAutoGrade = async () => {
     try {
       await api.post(`/teacher/assignments/${assignmentId}/auto-grade`);
+      setAutoGraded(new Set(submissions.map(s => s.id)));
       fetchData();
       alert('All submissions auto-graded successfully!');
     } catch (error: any) {
@@ -85,12 +97,45 @@ export default function GradeAssignment() {
   };
 
   const handleGenerateFeedback = async (submissionId: number) => {
+    setGeneratingFeedback(true);
     try {
       await api.post(`/teacher/submissions/${submissionId}/generate-feedback`);
-      fetchData();
+      await fetchData();
       alert('AI feedback generated successfully!');
     } catch (error: any) {
       alert(error.response?.data?.error || 'Failed to generate feedback');
+    } finally {
+      setGeneratingFeedback(false);
+    }
+  };
+
+  const handleManualGrade = async (submissionId: number, questionNumber: number, isCorrect: boolean, score: number) => {
+    if (!submission) return;
+    
+    const question = assignment?.questions.find(q => q.questionNumber === questionNumber);
+    if (!question) return;
+
+    try {
+      const response = await api.post(`/teacher/submissions/${submissionId}/manual-grade`, {
+        questionNumber,
+        isCorrect,
+        score: isCorrect ? question.marks : 0,
+      });
+      
+      // Update local state immediately
+      setSubmissions(prev => prev.map(s => 
+        s.id === submissionId 
+          ? { ...s, answers: response.data.answers, aiScore: response.data.aiScore }
+          : s
+      ));
+      
+      // Mark as graded
+      setAutoGraded(prev => new Set([...prev, submissionId]));
+      
+      // Refresh from server
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Failed to update grade');
     }
   };
 
@@ -131,8 +176,27 @@ export default function GradeAssignment() {
     ? submissions.find((s) => s.id === selectedSubmission)
     : null;
 
+  // Check if submission has been graded (auto or manual)
+  // A submission is considered graded if it has aiScore OR any answer has isCorrect defined
+  const isGraded = submission && (
+    autoGraded.has(submission.id) || 
+    submission.aiScore !== null ||
+    submission.answers.some(ans => ans.isCorrect !== undefined)
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 relative">
+      {/* Full-screen loader for feedback generation */}
+      {generatingFeedback && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+            <p className="text-lg font-semibold text-gray-900">Generating AI Feedback...</p>
+            <p className="text-sm text-gray-600">This may take a moment. Please wait.</p>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="flex justify-between items-center">
@@ -198,7 +262,8 @@ export default function GradeAssignment() {
                     {submission.aiScore !== null && !submission.answers[0]?.aiFeedback && (
                       <button
                         onClick={() => handleGenerateFeedback(submission.id)}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                        disabled={generatingFeedback}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         ✨ Generate AI Feedback
                       </button>
@@ -243,29 +308,59 @@ export default function GradeAssignment() {
                     );
                     if (!question) return null;
 
+                    // Only show colors if this specific question has been graded (auto or manual)
+                    const showColors = answer.isCorrect !== undefined;
+                    const isCorrect = answer.isCorrect === true;
+                    const isIncorrect = answer.isCorrect === false;
+                    const questionGraded = showColors;
+
                     return (
                       <div
                         key={idx}
                         className={`border rounded-lg p-4 ${
-                          answer.isCorrect
-                            ? 'border-green-200 bg-green-50'
-                            : 'border-red-200 bg-red-50'
+                          showColors
+                            ? isCorrect
+                              ? 'border-green-200 bg-green-50'
+                              : 'border-red-200 bg-red-50'
+                            : 'border-gray-200 bg-white'
                         }`}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            {answer.isCorrect ? (
-                              <span className="text-green-600 font-bold">✓</span>
-                            ) : (
-                              <span className="text-red-600 font-bold">✗</span>
+                            {showColors && (
+                              <>
+                                {isCorrect ? (
+                                  <span className="text-green-600 font-bold">✓</span>
+                                ) : (
+                                  <span className="text-red-600 font-bold">✗</span>
+                                )}
+                              </>
                             )}
                             <span className="font-medium text-gray-900">
                               Question {answer.questionNumber}
                             </span>
                           </div>
-                          <span className="text-sm font-medium text-gray-700">
-                            {answer.score || 0} / {question.marks} marks
-                          </span>
+                          <div className="flex items-center gap-4">
+                            {!questionGraded && (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleManualGrade(submission.id, answer.questionNumber, true, question.marks)}
+                                  className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 font-medium"
+                                >
+                                  ✓ Correct
+                                </button>
+                                <button
+                                  onClick={() => handleManualGrade(submission.id, answer.questionNumber, false, 0)}
+                                  className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 font-medium"
+                                >
+                                  ✗ Incorrect
+                                </button>
+                              </div>
+                            )}
+                            <span className="text-sm font-medium text-gray-700">
+                              {answer.score !== undefined ? answer.score : '--'} / {question.marks} marks
+                            </span>
+                          </div>
                         </div>
 
                         <p className="text-gray-900 mb-3">{question.questionText}</p>
@@ -273,15 +368,21 @@ export default function GradeAssignment() {
                         <div className="space-y-2 mb-3">
                           {question.options.map((option, optIdx) => {
                             const isSelected = answer.selectedOptions.includes(optIdx);
-                            const isCorrect = question.correctOptions.includes(optIdx);
+                            const isCorrectOption = question.correctOptions.includes(optIdx);
+                            const showOptionColors = showColors;
+                            
                             return (
                               <div
                                 key={optIdx}
                                 className={`p-2 rounded ${
-                                  isCorrect
-                                    ? 'bg-green-100 border border-green-300'
+                                  showOptionColors
+                                    ? isCorrectOption
+                                      ? 'bg-green-100 border border-green-300'
+                                      : isSelected
+                                      ? 'bg-red-100 border border-red-300'
+                                      : 'bg-gray-50 border border-gray-200'
                                     : isSelected
-                                    ? 'bg-red-100 border border-red-300'
+                                    ? 'bg-blue-50 border border-blue-200'
                                     : 'bg-gray-50 border border-gray-200'
                                 }`}
                               >
@@ -290,13 +391,17 @@ export default function GradeAssignment() {
                                     {String.fromCharCode(65 + optIdx)}.
                                   </span>
                                   <span>{option}</span>
-                                  {isCorrect && (
+                                  {showOptionColors && isCorrectOption && (
                                     <span className="ml-auto text-xs text-green-700 font-medium">
                                       (Correct)
                                     </span>
                                   )}
-                                  {isSelected && !isCorrect && (
-                                    <span className="ml-auto text-xs text-red-700 font-medium">
+                                  {isSelected && (
+                                    <span className={`ml-auto text-xs font-medium ${
+                                      showOptionColors && !isCorrectOption
+                                        ? 'text-red-700'
+                                        : 'text-blue-700'
+                                    }`}>
                                       (Selected)
                                     </span>
                                   )}
