@@ -146,12 +146,22 @@ export default function GradeAssignment() {
   };
 
   const handleFinalize = async (submission: Submission) => {
-    const finalScore = prompt('Enter final score (or leave blank to use AI score):', 
-      submission.aiScore?.toString() || '');
-    if (finalScore === null) return;
+    // Calculate total possible marks
+    const totalPossibleMarks = assignment?.questions.reduce((sum, q) => sum + (q.marks || 0), 0) || 1;
+    
+    // Calculate percentage from raw score
+    const currentScore = submission.finalScore ?? submission.aiScore ?? 0;
+    const percentage = (currentScore / totalPossibleMarks) * 100;
+    
+    const finalScoreInput = prompt(
+      `Enter final score (or leave blank to use current score):\n\nCurrent: ${currentScore} / ${totalPossibleMarks} (${percentage.toFixed(1)}%)`, 
+      currentScore.toString()
+    );
+    if (finalScoreInput === null) return;
 
-    const score = finalScore ? parseFloat(finalScore) : submission.aiScore;
-    const grade = getGradeFromScore(score || 0);
+    const score = finalScoreInput ? parseFloat(finalScoreInput) : currentScore;
+    const calculatedPercentage = (score / totalPossibleMarks) * 100;
+    const grade = getGradeFromScore(calculatedPercentage);
 
     try {
       await api.post(`/teacher/submissions/${submission.id}/finalize`, {
@@ -165,12 +175,12 @@ export default function GradeAssignment() {
     }
   };
 
-  const getGradeFromScore = (score: number): string => {
-    if (score >= 90) return 'A+';
-    if (score >= 80) return 'A';
-    if (score >= 70) return 'B';
-    if (score >= 60) return 'C';
-    if (score >= 50) return 'D';
+  const getGradeFromScore = (percentage: number): string => {
+    if (percentage >= 90) return 'A+';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B';
+    if (percentage >= 60) return 'C';
+    if (percentage >= 50) return 'D';
     return 'F';
   };
 
