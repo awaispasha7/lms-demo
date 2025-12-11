@@ -47,6 +47,7 @@ export default function GradeAssignment() {
   const [selectedSubmission, setSelectedSubmission] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [generatingFeedback, setGeneratingFeedback] = useState(false);
+  const [autoGrading, setAutoGrading] = useState(false);
   const [autoGraded, setAutoGraded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -88,13 +89,16 @@ export default function GradeAssignment() {
   };
 
   const handleAutoGrade = async () => {
+    setAutoGrading(true);
     try {
       await api.post(`/teacher/assignments/${assignmentId}/auto-grade`);
       setAutoGraded(new Set(submissions.map(s => s.id)));
-      fetchData();
+      await fetchData();
       alert('All submissions auto-graded successfully!');
     } catch (error: any) {
       alert(error.response?.data?.error || 'Failed to auto-grade');
+    } finally {
+      setAutoGrading(false);
     }
   };
 
@@ -199,6 +203,18 @@ export default function GradeAssignment() {
         </div>
       )}
       
+      {/* Full-screen loader for auto-grading */}
+      {autoGrading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+            <p className="text-lg font-semibold text-gray-900">Auto-Grading All Submissions...</p>
+            <p className="text-sm text-gray-600">This may take a moment. Please wait.</p>
+            <p className="text-xs text-gray-500">Grading {submissions.length} submission{submissions.length !== 1 ? 's' : ''}...</p>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="flex justify-between items-center">
@@ -210,9 +226,17 @@ export default function GradeAssignment() {
             </div>
             <button
               onClick={handleAutoGrade}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              disabled={autoGrading}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Auto-Grade All
+              {autoGrading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Grading...</span>
+                </>
+              ) : (
+                'Auto-Grade All'
+              )}
             </button>
           </div>
         </div>
