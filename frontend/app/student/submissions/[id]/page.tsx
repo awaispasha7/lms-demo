@@ -8,6 +8,7 @@ import Link from 'next/link';
 interface Answer {
   questionNumber: number;
   selectedOptions: number[];
+  textAnswer?: string;
   isCorrect?: boolean;
   score?: number;
   aiFeedback?: string;
@@ -19,6 +20,8 @@ interface Question {
   options: string[];
   correctOptions: number[];
   marks: number;
+  type?: string; // 'mcq', 'true_false', 'short_answer'
+  rubric?: string;
 }
 
 interface Submission {
@@ -132,77 +135,110 @@ export default function ViewSubmission() {
             );
             if (!question) return null;
 
-            const isCorrect = answer.isCorrect ?? false;
-            const studentAnswers = question.options.filter((_, idx) => 
-              answer.selectedOptions.includes(idx)
-            );
-            const correctAnswers = question.options.filter((_, idx) => 
-              question.correctOptions.includes(idx)
-            );
+            // Only show grading status if the question has been graded
+            const isGraded = answer.isCorrect !== undefined;
+            const isCorrect = answer.isCorrect === true;
+            const showGradingColors = isGraded;
 
             return (
               <div
                 key={idx}
                 className={`border rounded-lg p-6 ${
-                  isCorrect
-                    ? 'border-green-200 bg-green-50'
-                    : 'border-red-200 bg-red-50'
+                  showGradingColors
+                    ? isCorrect
+                      ? 'border-green-200 bg-green-50'
+                      : 'border-red-200 bg-red-50'
+                    : 'border-gray-200 bg-white'
                 }`}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    {isCorrect ? (
-                      <span className="text-2xl text-green-600">✓</span>
-                    ) : (
-                      <span className="text-2xl text-red-600">✗</span>
+                    {showGradingColors && (
+                      <>
+                        {isCorrect ? (
+                          <span className="text-2xl text-green-600">✓</span>
+                        ) : (
+                          <span className="text-2xl text-red-600">✗</span>
+                        )}
+                      </>
                     )}
                     <span className="font-semibold text-lg text-gray-900">
                       Question {answer.questionNumber}
                     </span>
                   </div>
                   <span className="text-sm font-medium text-gray-700">
-                    {answer.score || 0} / {question.marks} marks
+                    {isGraded ? `${answer.score || 0} / ${question.marks} marks` : `Not graded yet - ${question.marks} marks`}
                   </span>
                 </div>
 
                 <p className="text-gray-900 mb-4 text-lg">{question.questionText}</p>
 
-                <div className="space-y-2 mb-4">
-                  {question.options.map((option, optIdx) => {
-                    const isSelected = answer.selectedOptions.includes(optIdx);
-                    const isCorrectOption = question.correctOptions.includes(optIdx);
-                    
-                    return (
-                      <div
-                        key={optIdx}
-                        className={`p-3 rounded-lg border ${
-                          isCorrectOption
-                            ? 'bg-green-100 border-green-300'
-                            : isSelected
-                            ? 'bg-red-100 border-red-300'
-                            : 'bg-gray-50 border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">
-                            {String.fromCharCode(65 + optIdx)}.
-                          </span>
-                          <span>{option}</span>
-                          {isCorrectOption && (
-                            <span className="ml-auto text-xs text-green-700 font-medium bg-green-200 px-2 py-1 rounded">
-                              ✓ Correct Answer
-                            </span>
-                          )}
-                          {isSelected && !isCorrectOption && (
-                            <span className="ml-auto text-xs text-red-700 font-medium bg-red-200 px-2 py-1 rounded">
-                              Your Answer
-                            </span>
-                          )}
-                        </div>
+                {question.type === 'short_answer' ? (
+                  <div className="space-y-3 mb-4">
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Your Answer:</p>
+                      <p className="text-gray-900 whitespace-pre-wrap">{answer.textAnswer || '(No answer provided)'}</p>
+                    </div>
+                    {isGraded && question.rubric && (
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm font-medium text-blue-900 mb-2">Expected Key Points:</p>
+                        <p className="text-sm text-blue-800">{question.rubric}</p>
                       </div>
-                    );
-                  })}
-                </div>
+                    )}
+                    {!isGraded && (
+                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800">
+                          Your answer is being reviewed. Check back later for feedback.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2 mb-4">
+                    {question.options.map((option, optIdx) => {
+                      const isSelected = answer.selectedOptions.includes(optIdx);
+                      const isCorrectOption = question.correctOptions.includes(optIdx);
+                      
+                      return (
+                        <div
+                          key={optIdx}
+                          className={`p-3 rounded-lg border ${
+                            showGradingColors
+                              ? isCorrectOption
+                                ? 'bg-green-100 border-green-300'
+                                : isSelected
+                                ? 'bg-red-100 border-red-300'
+                                : 'bg-gray-50 border-gray-200'
+                              : isSelected
+                              ? 'bg-blue-50 border-blue-200'
+                              : 'bg-gray-50 border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              {String.fromCharCode(65 + optIdx)}.
+                            </span>
+                            <span>{option}</span>
+                            {showGradingColors && isCorrectOption && (
+                              <span className="ml-auto text-xs text-green-700 font-medium bg-green-200 px-2 py-1 rounded">
+                                ✓ Correct Answer
+                              </span>
+                            )}
+                            {isSelected && (
+                              <span className={`ml-auto text-xs font-medium px-2 py-1 rounded ${
+                                showGradingColors && !isCorrectOption
+                                  ? 'text-red-700 bg-red-200'
+                                  : 'text-blue-700 bg-blue-200'
+                              }`}>
+                                Your Answer
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {answer.aiFeedback && (
                   <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
