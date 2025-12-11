@@ -10,6 +10,8 @@ interface Question {
   questionText: string;
   options: string[];
   marks: number;
+  type?: string; // 'mcq', 'true_false', 'short_answer'
+  rubric?: string;
 }
 
 interface Assignment {
@@ -26,6 +28,7 @@ export default function StudentAssignment() {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [studentName, setStudentName] = useState('');
   const [answers, setAnswers] = useState<Record<number, number[]>>({});
+  const [textAnswers, setTextAnswers] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,10 +42,16 @@ export default function StudentAssignment() {
       setAssignment(response.data);
       // Initialize answers
       const initialAnswers: Record<number, number[]> = {};
+      const initialTextAnswers: Record<number, string> = {};
       response.data.questions.forEach((q: Question) => {
-        initialAnswers[q.questionNumber] = [];
+        if (q.type === 'short_answer') {
+          initialTextAnswers[q.questionNumber] = '';
+        } else {
+          initialAnswers[q.questionNumber] = [];
+        }
       });
       setAnswers(initialAnswers);
+      setTextAnswers(initialTextAnswers);
     } catch (error) {
       console.error('Error fetching assignment:', error);
     } finally {
@@ -70,10 +79,21 @@ export default function StudentAssignment() {
 
     setSubmitting(true);
     try {
-      const answersArray = Object.entries(answers).map(([questionNumber, selectedOptions]) => ({
-        questionNumber: parseInt(questionNumber),
-        selectedOptions,
-      }));
+      const answersArray = assignment?.questions.map((q: Question) => {
+        if (q.type === 'short_answer') {
+          return {
+            questionNumber: q.questionNumber,
+            selectedOptions: [], // Not used for short_answer
+            textAnswer: textAnswers[q.questionNumber] || '',
+          };
+        } else {
+          return {
+            questionNumber: q.questionNumber,
+            selectedOptions: answers[q.questionNumber] || [],
+            textAnswer: undefined,
+          };
+        }
+      });
 
       await api.post(`/student/assignments/${assignmentId}/submit`, {
         studentName,
@@ -135,25 +155,67 @@ export default function StudentAssignment() {
                     <span className="text-sm text-gray-500">{question.marks} marks</span>
                   </div>
                   <p className="text-gray-900 mb-4">{question.questionText}</p>
-                  <div className="space-y-2">
-                    {question.options.map((option, optIdx) => (
-                      <label
-                        key={optIdx}
-                        className="flex items-center gap-3 p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={(answers[question.questionNumber] || []).includes(optIdx)}
-                          onChange={() => toggleAnswer(question.questionNumber, optIdx)}
-                          className="h-4 w-4 text-blue-600"
-                        />
-                        <span className="font-medium mr-2">
-                          {String.fromCharCode(65 + optIdx)}.
-                        </span>
-                        <span>{option}</span>
-                      </label>
-                    ))}
-                  </div>
+                  
+                  {question.type === 'short_answer' ? (
+                    <div className="mt-4">
+                      <textarea
+                        value={textAnswers[question.questionNumber] || ''}
+                        onChange={(e) => setTextAnswers(prev => ({
+                          ...prev,
+                          [question.questionNumber]: e.target.value
+                        }))}
+                        placeholder="Type your answer here..."
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                        required
+                      />
+                    </div>
+                  ) : question.type === 'true_false' ? (
+                    <div className="space-y-2">
+                      {question.options.map((option, optIdx) => (
+                        <label
+                          key={optIdx}
+                          className="flex items-center gap-3 p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="radio"
+                            name={`question-${question.questionNumber}`}
+                            checked={(answers[question.questionNumber] || [])[0] === optIdx}
+                            onChange={() => setAnswers(prev => ({
+                              ...prev,
+                              [question.questionNumber]: [optIdx]
+                            }))}
+                            className="h-4 w-4 text-blue-600"
+                            required
+                          />
+                          <span className="font-medium mr-2">
+                            {String.fromCharCode(65 + optIdx)}.
+                          </span>
+                          <span>{option}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {question.options.map((option, optIdx) => (
+                        <label
+                          key={optIdx}
+                          className="flex items-center gap-3 p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={(answers[question.questionNumber] || []).includes(optIdx)}
+                            onChange={() => toggleAnswer(question.questionNumber, optIdx)}
+                            className="h-4 w-4 text-blue-600"
+                          />
+                          <span className="font-medium mr-2">
+                            {String.fromCharCode(65 + optIdx)}.
+                          </span>
+                          <span>{option}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -15,6 +15,7 @@ interface Submission {
   answers: Array<{
     questionNumber: number;
     selectedOptions: number[];
+    textAnswer?: string;
     isCorrect?: boolean;
     score?: number;
     aiFeedback?: string;
@@ -28,6 +29,7 @@ interface Question {
   correctOptions: number[];
   rubric: string;
   marks: number;
+  type?: string; // 'mcq', 'true_false', 'short_answer'
 }
 
 interface Assignment {
@@ -365,51 +367,66 @@ export default function GradeAssignment() {
 
                         <p className="text-gray-900 mb-3">{question.questionText}</p>
 
-                        <div className="space-y-2 mb-3">
-                          {question.options.map((option, optIdx) => {
-                            const isSelected = answer.selectedOptions.includes(optIdx);
-                            const isCorrectOption = question.correctOptions.includes(optIdx);
-                            const showOptionColors = showColors;
-                            
-                            return (
-                              <div
-                                key={optIdx}
-                                className={`p-2 rounded ${
-                                  showOptionColors
-                                    ? isCorrectOption
-                                      ? 'bg-green-100 border border-green-300'
-                                      : isSelected
-                                      ? 'bg-red-100 border border-red-300'
-                                      : 'bg-gray-50 border border-gray-200'
-                                    : isSelected
-                                    ? 'bg-blue-50 border border-blue-200'
-                                    : 'bg-gray-50 border border-gray-200'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">
-                                    {String.fromCharCode(65 + optIdx)}.
-                                  </span>
-                                  <span>{option}</span>
-                                  {showOptionColors && isCorrectOption && (
-                                    <span className="ml-auto text-xs text-green-700 font-medium">
-                                      (Correct)
-                                    </span>
-                                  )}
-                                  {isSelected && (
-                                    <span className={`ml-auto text-xs font-medium ${
-                                      showOptionColors && !isCorrectOption
-                                        ? 'text-red-700'
-                                        : 'text-blue-700'
-                                    }`}>
-                                      (Selected)
-                                    </span>
-                                  )}
-                                </div>
+                        {question.type === 'short_answer' ? (
+                          <div className="mb-3">
+                            <div className="p-4 bg-gray-50 border border-gray-200 rounded-md">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Student's Answer:</p>
+                              <p className="text-gray-900 whitespace-pre-wrap">{answer.textAnswer || '(No answer provided)'}</p>
+                            </div>
+                            {question.rubric && (
+                              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                <p className="text-sm font-medium text-blue-900 mb-1">Expected Key Points:</p>
+                                <p className="text-sm text-blue-800">{question.rubric}</p>
                               </div>
-                            );
-                          })}
-                        </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2 mb-3">
+                            {question.options.map((option, optIdx) => {
+                              const isSelected = answer.selectedOptions.includes(optIdx);
+                              const isCorrectOption = question.correctOptions.includes(optIdx);
+                              const showOptionColors = showColors;
+                              
+                              return (
+                                <div
+                                  key={optIdx}
+                                  className={`p-2 rounded ${
+                                    showOptionColors
+                                      ? isCorrectOption
+                                        ? 'bg-green-100 border border-green-300'
+                                        : isSelected
+                                        ? 'bg-red-100 border border-red-300'
+                                        : 'bg-gray-50 border border-gray-200'
+                                      : isSelected
+                                      ? 'bg-blue-50 border border-blue-200'
+                                      : 'bg-gray-50 border border-gray-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">
+                                      {String.fromCharCode(65 + optIdx)}.
+                                    </span>
+                                    <span>{option}</span>
+                                    {showOptionColors && isCorrectOption && (
+                                      <span className="ml-auto text-xs text-green-700 font-medium">
+                                        (Correct)
+                                      </span>
+                                    )}
+                                    {isSelected && (
+                                      <span className={`ml-auto text-xs font-medium ${
+                                        showOptionColors && !isCorrectOption
+                                          ? 'text-red-700'
+                                          : 'text-blue-700'
+                                      }`}>
+                                        (Selected)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {answer.aiFeedback && (
                           <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded">
