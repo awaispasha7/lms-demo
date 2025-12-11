@@ -49,6 +49,10 @@ export default function GradeAssignment() {
   const [generatingFeedback, setGeneratingFeedback] = useState(false);
   const [autoGrading, setAutoGrading] = useState(false);
   const [autoGraded, setAutoGraded] = useState<Set<number>>(new Set());
+  const [showFinalizeModal, setShowFinalizeModal] = useState(false);
+  const [finalizeSubmission, setFinalizeSubmission] = useState<Submission | null>(null);
+  const [finalizeScore, setFinalizeScore] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -60,6 +64,19 @@ export default function GradeAssignment() {
 
     return () => clearInterval(interval);
   }, [assignmentId]);
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showFinalizeModal) {
+        setShowFinalizeModal(false);
+        setFinalizeSubmission(null);
+        setFinalizeScore('');
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [showFinalizeModal]);
 
   const fetchData = async () => {
     try {
@@ -88,15 +105,20 @@ export default function GradeAssignment() {
     }
   };
 
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const handleAutoGrade = async () => {
     setAutoGrading(true);
     try {
       await api.post(`/teacher/assignments/${assignmentId}/auto-grade`);
       setAutoGraded(new Set(submissions.map(s => s.id)));
       await fetchData();
-      alert('All submissions auto-graded successfully!');
+      showToast('All submissions auto-graded successfully!');
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to auto-grade');
+      showToast(error.response?.data?.error || 'Failed to auto-grade', 'error');
     } finally {
       setAutoGrading(false);
     }
@@ -107,9 +129,9 @@ export default function GradeAssignment() {
     try {
       await api.post(`/teacher/submissions/${submissionId}/generate-feedback`);
       await fetchData();
-      alert('AI feedback generated successfully!');
+      // No alert needed - the spinner already shows completion
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to generate feedback');
+      showToast(error.response?.data?.error || 'Failed to generate feedback', 'error');
     } finally {
       setGeneratingFeedback(false);
     }
@@ -141,46 +163,53 @@ export default function GradeAssignment() {
       // Refresh from server
       fetchData();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to update grade');
+      showToast(error.response?.data?.error || 'Failed to update grade', 'error');
     }
   };
 
-  const handleFinalize = async (submission: Submission) => {
-    // Calculate total possible marks
+  const openFinalizeModal = (submission: Submission) => {
     const totalPossibleMarks = assignment?.questions.reduce((sum, q) => sum + (q.marks || 0), 0) || 1;
-    
-    // Calculate percentage from raw score
     const currentScore = submission.finalScore ?? submission.aiScore ?? 0;
-    const percentage = (currentScore / totalPossibleMarks) * 100;
-    
-    const finalScoreInput = prompt(
-      `Enter final score (or leave blank to use current score):\n\nCurrent: ${currentScore} / ${totalPossibleMarks} (${percentage.toFixed(1)}%)`, 
-      currentScore.toString()
-    );
-    if (finalScoreInput === null) return;
+    setFinalizeSubmission(submission);
+    setFinalizeScore(currentScore.toString());
+    setShowFinalizeModal(true);
+  };
 
-    const score = finalScoreInput ? parseFloat(finalScoreInput) : currentScore;
+  const handleFinalize = async () => {
+    if (!finalizeSubmission || !assignment) return;
+    
+    const totalPossibleMarks = assignment.questions.reduce((sum, q) => sum + (q.marks || 0), 0) || 1;
+    const currentScore = finalizeSubmission.finalScore ?? finalizeSubmission.aiScore ?? 0;
+    const score = finalizeScore ? parseFloat(finalizeScore) : currentScore;
+    
+    if (isNaN(score) || score < 0 || score > totalPossibleMarks) {
+      showToast(`Score must be between 0 and ${totalPossibleMarks}`, 'error');
+      return;
+    }
+
     const calculatedPercentage = (score / totalPossibleMarks) * 100;
     const grade = getGradeFromScore(calculatedPercentage);
 
     try {
-      await api.post(`/teacher/submissions/${submission.id}/finalize`, {
+      await api.post(`/teacher/submissions/${finalizeSubmission.id}/finalize`, {
         finalScore: score,
         finalGrade: grade,
       });
-      fetchData();
-      alert('Grade finalized!');
+      await fetchData();
+      setShowFinalizeModal(false);
+      setFinalizeSubmission(null);
+      showToast('Grade finalized successfully!');
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to finalize grade');
+      showToast(error.response?.data?.error || 'Failed to finalize grade', 'error');
     }
   };
 
   const getGradeFromScore = (percentage: number): string => {
     if (percentage >= 90) return 'A+';
-    if (percentage >= 80) return 'A';
-    if (percentage >= 70) return 'B';
-    if (percentage >= 60) return 'C';
-    if (percentage >= 50) return 'D';
+    if (percentage >= 75) return 'A';
+    if (percentage >= 60) return 'B';
+    if (percentage >= 45) return 'C';
+    if (percentage >= 30) return 'D';
     return 'F';
   };
 
@@ -200,8 +229,96 @@ export default function GradeAssignment() {
     submission.answers.some(ans => ans.isCorrect !== undefined)
   );
 
+  // Calculate totals for finalize modal
+  const totalPossibleMarks = assignment?.questions.reduce((sum, q) => sum + (q.marks || 0), 0) || 1;
+  const currentScoreForModal = finalizeSubmission 
+    ? (finalizeSubmission.finalScore ?? finalizeSubmission.aiScore ?? 0)
+    : 0;
+  const currentPercentageForModal = (currentScoreForModal / totalPossibleMarks) * 100;
+
   return (
     <div className="min-h-screen bg-gray-50 relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 ${
+          toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          <span>{toast.type === 'success' ? '✓' : '✗'}</span>
+          <span>{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 hover:opacity-70"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Finalize Grade Modal */}
+      {showFinalizeModal && finalizeSubmission && assignment && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowFinalizeModal(false);
+              setFinalizeSubmission(null);
+              setFinalizeScore('');
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Finalize Grade</h2>
+            
+            <div className="mb-4 p-3 bg-gray-50 rounded">
+              <p className="text-sm text-gray-600 mb-1">Student: <span className="font-semibold">{finalizeSubmission.studentName}</span></p>
+              <p className="text-sm text-gray-600">
+                Current Score: {currentScoreForModal} / {totalPossibleMarks} ({currentPercentageForModal.toFixed(1)}%)
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Final Score (0 - {totalPossibleMarks})
+              </label>
+              <input
+                type="number"
+                min="0"
+                max={totalPossibleMarks}
+                value={finalizeScore}
+                onChange={(e) => setFinalizeScore(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={currentScoreForModal.toString()}
+              />
+              {finalizeScore && !isNaN(parseFloat(finalizeScore)) && (
+                <p className="mt-2 text-sm text-gray-600">
+                  Grade: <span className="font-semibold">{getGradeFromScore((parseFloat(finalizeScore) / totalPossibleMarks) * 100)}</span>
+                  {' '}({(parseFloat(finalizeScore) / totalPossibleMarks) * 100}%)
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowFinalizeModal(false);
+                  setFinalizeSubmission(null);
+                  setFinalizeScore('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFinalize}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Finalize
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Full-screen loader for feedback generation */}
       {generatingFeedback && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
@@ -306,7 +423,7 @@ export default function GradeAssignment() {
                     )}
                     {submission.status !== 'graded' && (
                       <button
-                        onClick={() => handleFinalize(submission)}
+                        onClick={() => openFinalizeModal(submission)}
                         className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                       >
                         Finalize Grade
