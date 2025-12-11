@@ -221,23 +221,34 @@ export default function StudentAssignment() {
                     </div>
                   ) : (
                     <div className="space-y-2">
+                      <p className="text-sm text-gray-600 mb-2 italic">
+                        Select all that apply (you can choose multiple options)
+                      </p>
                       {question.options.map((option, optIdx) => (
                         <label
                           key={optIdx}
-                          className="flex items-center gap-3 p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
+                          className="flex items-center gap-3 p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer transition-colors"
                         >
                           <input
                             type="checkbox"
                             checked={(answers[question.questionNumber] || []).includes(optIdx)}
                             onChange={() => toggleAnswer(question.questionNumber, optIdx)}
-                            className="h-4 w-4 text-blue-600"
+                            className="h-4 w-4 text-blue-600 cursor-pointer"
                           />
                           <span className="font-medium mr-2">
                             {String.fromCharCode(65 + optIdx)}.
                           </span>
-                          <span>{option}</span>
+                          <span className="flex-1">{option}</span>
+                          {(answers[question.questionNumber] || []).includes(optIdx) && (
+                            <span className="text-xs text-blue-600 font-medium">Selected</span>
+                          )}
                         </label>
                       ))}
+                      {(answers[question.questionNumber] || []).length > 0 && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          {answers[question.questionNumber].length} option{(answers[question.questionNumber] || []).length !== 1 ? 's' : ''} selected
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
