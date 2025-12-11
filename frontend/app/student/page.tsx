@@ -28,6 +28,7 @@ export default function StudentPortal() {
   const [studentName, setStudentName] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignments' | 'grades'>('assignments');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const fetchAssignments = async () => {
     try {
@@ -79,7 +80,22 @@ export default function StudentPortal() {
   }, [studentName, activeTab]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 ${
+          toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          <span>{toast.type === 'success' ? '✓' : '✗'}</span>
+          <span>{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 hover:opacity-70"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Student Portal</h1>
@@ -163,7 +179,8 @@ export default function StudentPortal() {
                 <button
                   onClick={() => {
                     if (!studentName.trim()) {
-                      alert('Please enter your name to view grades');
+                      setToast({ message: 'Please enter your name to view grades', type: 'error' });
+                      setTimeout(() => setToast(null), 3000);
                       return;
                     }
                     setActiveTab('grades');

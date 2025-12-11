@@ -31,6 +31,7 @@ export default function StudentAssignment() {
   const [textAnswers, setTextAnswers] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     fetchAssignment();
@@ -70,10 +71,15 @@ export default function StudentAssignment() {
     });
   };
 
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName.trim()) {
-      alert('Please enter your name');
+      showToast('Please enter your name', 'error');
       return;
     }
 
@@ -100,11 +106,13 @@ export default function StudentAssignment() {
         answers: answersArray,
       });
 
-      alert('Assignment submitted successfully!');
-      router.push('/student');
+      showToast('Assignment submitted successfully!');
+      // Wait a moment to show the toast, then redirect
+      setTimeout(() => {
+        router.push('/student');
+      }, 1500);
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to submit assignment');
-    } finally {
+      showToast(error.response?.data?.error || 'Failed to submit assignment', 'error');
       setSubmitting(false);
     }
   };
@@ -118,7 +126,23 @@ export default function StudentAssignment() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gray-50 py-8 relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 ${
+          toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          <span>{toast.type === 'success' ? '✓' : '✗'}</span>
+          <span>{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 hover:opacity-70"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto px-4">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="mb-6">

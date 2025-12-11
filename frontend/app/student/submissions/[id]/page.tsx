@@ -59,7 +59,7 @@ export default function ViewSubmission() {
     } catch (error: any) {
       console.error('Error fetching submission:', error);
       if (error.response?.status === 404) {
-        alert('Submission not found');
+        // Redirect without alert - 404 is handled by the UI
         router.push('/student');
       }
     } finally {
